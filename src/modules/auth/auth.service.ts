@@ -48,27 +48,21 @@ export class AuthService {
 
     const isProd = this.configService.get('NODE_ENV') === 'production';
 
-    if (isProd && accessToken) {
-      // Production: bắt buộc verify access token với Zalo Graph API
+    if (accessToken) {
+      // Cố verify token với Zalo Graph API (tăng bảo mật)
       try {
         const verifiedId = await this.verifyZaloToken(accessToken);
-        // Đảm bảo zaloId khớp với token
         if (verifiedId !== zaloIdFromClient) {
-          throw new UnauthorizedException('zaloId không khớp với access token');
+          if (isProd) {
+            throw new UnauthorizedException('zaloId không khớp với access token');
+          }
+        } else {
+          zaloId = verifiedId;
         }
-        zaloId = verifiedId;
-      } catch (error) {
-        this.logger.error('Verify Zalo token thất bại (production)', error);
-        throw new UnauthorizedException('Không thể xác thực với Zalo');
-      }
-    } else if (accessToken) {
-      // Dev: cố verify, nếu fail thì dùng zaloId từ client (đến từ getUserID SDK)
-      try {
-        const verifiedId = await this.verifyZaloToken(accessToken);
-        zaloId = verifiedId;
-      } catch {
-        this.logger.warn('Dev mode: verify token thất bại, dùng zaloId từ getUserID()');
-        // zaloId vẫn là zaloIdFromClient — đã được ZMP SDK xác thực
+      } catch (error: unknown) {
+        if (error instanceof UnauthorizedException) throw error;
+        // Verify fail → dùng zaloId từ getUserID() (SDK chạy trong Zalo WebView)
+        this.logger.warn('Verify Zalo token thất bại, dùng zaloId từ getUserID()');
       }
     }
 
